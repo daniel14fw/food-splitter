@@ -41,6 +41,7 @@ section.block{margin-top:26px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow)}
 input,select,textarea,button{font:inherit;color:inherit}
 .in{width:100%;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:9px 11px;min-height:42px}
+.in.invalid{border-color:var(--pay);background:var(--pay-soft)}
 .in:focus{outline:2px solid var(--accent);outline-offset:-1px;background:var(--card)}
 select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 17px) 18px,calc(100% - 12px) 18px;background-size:5px 5px;background-repeat:no-repeat;padding-right:30px}
 label.f{display:block;font-size:12px;color:var(--muted);font-weight:600;margin:0 0 4px}
@@ -64,8 +65,9 @@ label.f{display:block;font-size:12px;color:var(--muted);font-weight:600;margin:0
 .items{display:flex;flex-direction:column;gap:12px}
 .item{padding:14px}
 .item.bad{border-color:var(--warn)}
-.irow{display:grid;gap:10px;grid-template-columns:150px 1fr 38px;align-items:end}
-.irow2{display:grid;gap:10px;grid-template-columns:150px 1fr;margin-top:10px}
+.ifields{display:grid;gap:10px;align-items:end;grid-template-columns:150px 1fr 38px;grid-template-areas:"cat name del" "total payer payer"}
+.f-cat{grid-area:cat}.f-name{grid-area:name;min-width:0}.f-total{grid-area:total}.f-payer{grid-area:payer;min-width:0}.f-del{grid-area:del}
+@media (min-width:820px){.ifields{grid-template-columns:130px minmax(0,1fr) 130px 190px 38px;grid-template-areas:"cat name total payer del"}}
 .parts-h{display:flex;align-items:center;justify-content:space-between;margin:12px 0 6px;gap:8px;flex-wrap:wrap}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .chip{position:relative;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 12px 6px 8px;cursor:pointer;user-select:none;background:var(--paper);font-weight:500;min-height:36px;transition:background .12s,border-color .12s}
@@ -174,9 +176,7 @@ footer.foot{margin:34px 0 10px;color:var(--muted);font-size:12.5px;text-align:ce
 @media (max-width:640px){
   .wrap{padding:0 12px}
   .title-in{font-size:22px}
-  .irow{grid-template-columns:1fr 38px}
-  .irow .cat-f{grid-column:1/-1}
-  .irow2{grid-template-columns:1fr 1fr}
+  .ifields{grid-template-columns:1fr 1fr 38px;grid-template-areas:"cat cat del" "name name name" "total payer payer"}
   .mrow,.mhead{grid-template-columns:28px 1fr 1fr 38px;gap:6px}
   .sumtable th,.sumtable td{padding:9px 6px;font-size:13.5px}
   .sumtable .hide-m{display:none}
@@ -210,7 +210,7 @@ footer.foot{margin:34px 0 10px;color:var(--muted);font-size:12.5px;text-align:ce
   <div class="wrap">
     <div class="tot"><small id="bbSub">ยอดรวม</small><b class="num" id="bbTotal">฿0</b></div>
     <nav class="nav"><a href="#members">สมาชิก</a><a href="#items">รายการ</a></nav>
-    <a class="btn hide-sm" href="#summary" style="text-decoration:none">สรุป</a>
+    <a class="btn hide-sm" href="#summary" style="text-decoration:none;color:inherit">สรุป</a>
     <a class="btn primary" href="#summary-page" style="text-decoration:none">หน้าสรุป →</a>
   </div>
 </div>
@@ -346,6 +346,16 @@ function renderEmpty(){
       h('button',{class:'btn primary',onclick:()=>{document.querySelector('#newMember')?.focus();}},'+ เพิ่มชื่อเพื่อน'))
   );
 }
+/* PromptPay input: digits only, max 15 (phone 10 / ID 13 / e-wallet 15) */
+function ppIn(m){
+  const clean=v=>String(v||'').replace(/[๐-๙]/g,c=>String(c.charCodeAt(0)-0x0E50)).replace(/\D/g,'').slice(0,15);
+  const el=h('input',{class:'in mono',type:'text',inputmode:'numeric',pattern:'[0-9]*',maxlength:'15',autocomplete:'off',enterkeyhint:'done',placeholder:'เบอร์ / เลขบัตร',value:clean(m.pp),'aria-label':'PromptPay ของ '+m.name});
+  const mark=()=>el.classList.toggle('invalid',!!el.value&&!ppTarget(el.value));
+  el.addEventListener('keydown',e=>{ if(e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!/[\d๐-๙]/.test(e.key)) e.preventDefault(); });
+  el.addEventListener('input',()=>{ const c=clean(el.value); if(c!==el.value) el.value=c; el.classList.remove('invalid'); m.pp=c; save(); refresh(); });
+  el.addEventListener('blur',mark); mark();
+  return el;
+}
 function renderMembers(){
   const list=h('div',{});
   if(S.members.length) list.append(h('div',{class:'mhead'},h('span'),h('span',{},'ชื่อ'),h('span',{},'PromptPay (ไม่บังคับ)'),h('span')));
@@ -353,7 +363,7 @@ function renderMembers(){
     list.append(h('div',{class:'mrow'},
       avatar(m.id),
       h('input',{class:'in',value:m.name,placeholder:'ชื่อ','aria-label':'ชื่อ',oninput:e=>{m.name=e.target.value;save();syncNames(m.id);refresh();}}),
-      h('input',{class:'in mono',value:m.pp||'',placeholder:'เบอร์ / เลขบัตร',inputmode:'numeric','aria-label':'PromptPay ของ '+m.name,oninput:e=>{m.pp=e.target.value;save();refresh();}}),
+      ppIn(m),
       h('button',{class:'btn icon ghost danger',title:'ลบ',onclick:()=>askRemoveMember(m)},'✕')
     ));
   });
@@ -405,6 +415,19 @@ function renderItems(){
     }},'+ เพิ่มรายการ')
   );
 }
+/* number-only input: digits + one dot, max 2 decimals; numeric keypad on mobile */
+function cleanNum(v){
+  v=String(v).replace(/[๐-๙]/g,c=>String(c.charCodeAt(0)-0x0E50)).replace(/[^\d.]/g,'');
+  const i=v.indexOf('.');
+  if(i>=0) v=v.slice(0,i+1)+v.slice(i+1).replace(/\./g,'').slice(0,2);
+  return v;
+}
+function numIn(val,onv){
+  const el=h('input',{class:'in num',type:'text',inputmode:'decimal',pattern:'[0-9]*\\.?[0-9]*',autocomplete:'off',enterkeyhint:'done',placeholder:'0',value:val});
+  el.addEventListener('keydown',e=>{ if(e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!/[\d.๐-๙]/.test(e.key)) e.preventDefault(); });
+  el.addEventListener('input',()=>{ const c=cleanNum(el.value); if(c!==el.value){ const p=el.selectionStart-(el.value.length-c.length); el.value=c; try{el.setSelectionRange(p,p);}catch(_){} } onv(c); });
+  return el;
+}
 function renderItem(it){
   const upd=()=>{save();refresh();};
   const payerSel=h('select',{class:'in','aria-label':'คนจ่ายเงิน',onchange:e=>{
@@ -434,19 +457,17 @@ function renderItem(it){
       h('label',{class:'f'},'แต่ละคนจ่ายไปเท่าไหร่'),
       h('div',{class:'multi-grid'},S.members.map(m=>h('div',{class:'mi'},
         h('span',{'data-mname':m.id,title:m.name},m.name||'?'),
-        h('input',{class:'in num',inputmode:'decimal',placeholder:'0',value:it.payers[m.id]||'',oninput:e=>{it.payers[m.id]=e.target.value;upd();}})))),
+        numIn(it.payers[m.id]||'',v=>{it.payers[m.id]=v;upd();})))),
       h('div',{class:'multi-sum','data-msum':it.id})
     );
   }
   return h('div',{class:'card item','data-item':it.id},
-    h('div',{class:'irow'},
-      h('div',{class:'cat-f'},h('label',{class:'f'},'หมวดหมู่'),h('input',{class:'in',list:'catlist',value:it.cat,placeholder:'หมวดหมู่',oninput:e=>{it.cat=e.target.value;upd();}})),
-      h('div',{},h('label',{class:'f'},'รายการ'),h('input',{class:'in name-in',value:it.name,placeholder:'เช่น ข้าวผัด, ค่าที่พัก',oninput:e=>{it.name=e.target.value;upd();}})),
-      h('button',{class:'btn icon ghost danger',title:'ลบรายการ',onclick:()=>{S.items=S.items.filter(x=>x.id!==it.id);save();document.querySelector('[data-item="'+it.id+'"]')?.remove();refresh();toastUndo(it);}},'✕')
-    ),
-    h('div',{class:'irow2'},
-      h('div',{},h('label',{class:'f'},'ราคารวม (บาท)'),h('input',{class:'in num',inputmode:'decimal',placeholder:'0',value:it.total,oninput:e=>{it.total=e.target.value;upd();}})),
-      h('div',{},h('label',{class:'f'},'คนจ่ายเงิน'),payerSel)
+    h('div',{class:'ifields'},
+      h('div',{class:'f-cat'},h('label',{class:'f'},'หมวดหมู่'),h('input',{class:'in',list:'catlist',value:it.cat,placeholder:'หมวดหมู่',oninput:e=>{it.cat=e.target.value;upd();}})),
+      h('div',{class:'f-name'},h('label',{class:'f'},'รายการ'),h('input',{class:'in name-in',value:it.name,placeholder:'เช่น ข้าวผัด, ค่าที่พัก',oninput:e=>{it.name=e.target.value;upd();}})),
+      h('div',{class:'f-total'},h('label',{class:'f'},'ราคารวม (บาท)'),numIn(it.total,v=>{it.total=v;upd();})),
+      h('div',{class:'f-payer'},h('label',{class:'f'},'คนจ่ายเงิน'),payerSel),
+      h('button',{class:'btn icon ghost danger f-del',title:'ลบรายการ',onclick:()=>{S.items=S.items.filter(x=>x.id!==it.id);save();document.querySelector('[data-item="'+it.id+'"]')?.remove();refresh();toastUndo(it);}},'✕')
     ),
     multi,
     h('div',{class:'parts-h'},h('label',{class:'f',style:'margin:0'},'ใครต้องหารบ้าง'),
@@ -583,7 +604,7 @@ function showQR(t){
     const tg=ppTarget(to&&to.pp);
     body.append(h('h3',{},`${mName(t.from)} โอนให้ ${mName(t.to)}`));
     if(!tg){
-      const inp=h('input',{class:'in mono',inputmode:'numeric',placeholder:'เบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก',value:to?.pp||''});
+      const inp=h('input',{class:'in mono',inputmode:'numeric',pattern:'[0-9]*',maxlength:'15',oninput:e=>{e.target.value=e.target.value.replace(/\D/g,'').slice(0,15);},placeholder:'เบอร์มือถือ 10 หลัก หรือเลขบัตร 13 หลัก',value:to?.pp||''});
       body.append(h('p',{},`ใส่ PromptPay ของ ${mName(t.to)} เพื่อสร้าง QR พร้อมยอดเงิน`),inp,
         h('div',{class:'acts'},h('button',{class:'btn',onclick:closeModal},'ปิด'),h('button',{class:'btn primary',onclick:()=>{
           if(!ppTarget(inp.value)){toast('รูปแบบเบอร์/เลขบัตรไม่ถูกต้อง');return;}
